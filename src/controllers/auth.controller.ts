@@ -28,4 +28,48 @@ export const register = async (req: Request, res: Response) => {
         res.status(500).json({message: 'Error registering user'});
     }
 };
+export const login = async (req: Request, res: Response) => {
+  const { email, password } = req.body;
+  try {
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user) {
+      return res.status(401).json({ message: 'Invalid credentials' });
+    }
+
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid) {
+      return res.status(401).json({ message: 'Invalid credentials' });
+    }
+
+    const token = signToken(user.id);
+    const { password: _, ...userWithoutPassword } = user;
+    res.status(200).json({ token, user: userWithoutPassword });
+
+  } catch (error) {
+    res.status(500).json({ message: 'Error logging in' });
+  }
+};
+export const getMe = async (req: Request, res: Response) => {
+  const userId = req.user?.id;
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        skills: {
+          include: { skill: true }
+        }
+      }
+    });
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const { password: _, ...userWithoutPassword } = user;
+    res.status(200).json({ user: userWithoutPassword });
+
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching profile' });
+  }
+};
 
