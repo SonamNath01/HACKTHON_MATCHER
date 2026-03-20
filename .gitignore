@@ -1,0 +1,14 @@
+# Environment variables - NEVER push this
+.env
+
+# Dependencies - too large to push
+node_modules/
+
+# Prisma generated client
+prisma/generated/
+
+# TypeScript compiled output
+dist/
+
+# OS files
+.DS_Store

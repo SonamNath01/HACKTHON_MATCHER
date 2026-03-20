@@ -1,0 +1,116 @@
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id               String           @id @default(uuid())
+  name             String
+  email            String           @unique
+  password         String
+  timezoneOffset   Int              @default(0)
+  availability     AvailabilityType @default(FULL_TIME)
+  reliabilityScore Int              @default(50)
+  skills           UserSkill[]
+  createdTeams     Team[]           @relation("TeamLeader")
+  memberOfTeams    TeamMember[]
+  sentMatches      Match[]          @relation("Sender")
+  receivedMatches  Match[]          @relation("Receiver")
+  createdAt        DateTime         @default(now())
+}
+
+model Skill {
+  id            String               @id @default(uuid())
+  name          String               @unique
+  users         UserSkill[]
+  requiredByTeams TeamRequiredSkill[]
+}
+
+model UserSkill {
+  userId      String
+  skillId     String
+  proficiency ProficiencyLevel @default(BEGINNER)
+  user        User             @relation(fields: [userId], references: [id])
+  skill       Skill            @relation(fields: [skillId], references: [id])
+
+  @@id([userId, skillId])
+}
+
+model Team {
+  id             String               @id @default(uuid())
+  name           String
+  hackathonName  String
+  leaderId       String
+  maxSize        Int                  @default(4)
+  status         TeamStatus           @default(FORMING)
+  leader         User                 @relation("TeamLeader", fields: [leaderId], references: [id])
+  members        TeamMember[]
+  requiredSkills TeamRequiredSkill[]
+  matches        Match[]
+  createdAt      DateTime             @default(now())
+}
+
+model TeamRequiredSkill {
+  teamId  String
+  skillId String
+  team    Team   @relation(fields: [teamId], references: [id])
+  skill   Skill  @relation(fields: [skillId], references: [id])
+
+  @@id([teamId, skillId])
+}
+
+model TeamMember {
+  id       String   @id @default(uuid())
+  teamId   String
+  userId   String
+  team     Team     @relation(fields: [teamId], references: [id])
+  user     User     @relation(fields: [userId], references: [id])
+  joinedAt DateTime @default(now())
+
+  @@unique([teamId, userId])
+}
+
+model Match {
+  id         String      @id @default(uuid())
+  teamId     String
+  senderId   String
+  receiverId String
+  score      Int
+  status     MatchStatus @default(PENDING)
+  team       Team        @relation(fields: [teamId], references: [id])
+  sender     User        @relation("Sender", fields: [senderId], references: [id])
+  receiver   User        @relation("Receiver", fields: [receiverId], references: [id])
+  createdAt  DateTime    @default(now())
+
+  @@unique([teamId, receiverId])
+}
+
+enum AvailabilityType {
+  FULL_TIME
+  PART_TIME
+  WEEKENDS_ONLY
+}
+
+enum MatchStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+enum ProficiencyLevel {
+  BEGINNER
+  INTERMEDIATE
+  EXPERT
+}
+
+enum TeamStatus {
+  FORMING
+  ACTIVE
+  SUBMITTED
+  DISBANDED
+}
