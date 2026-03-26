@@ -141,3 +141,64 @@ export const updateTeamStatus = async (req: Request, res: Response) => {
     res.status(500).json({ message: 'Error updating team status' });
   }
 };
+export const inviteToTeam = async (req: Request, res: Response) => {
+  const teamId = req.params.id as string;
+  const { email } = req.body;
+  const userId = req.user?.id;
+
+  try {
+    //team exists?
+    const team = await prisma.team.findUnique({ where: { id: teamId } });
+    if (!team) {
+      return res.status(404).json({ message: 'Team not found' });
+    }
+    //requester is the leader?
+    if (team.leaderId !== userId) {
+      return res.status(403).json({ message: 'Only the team leader can invite members' });
+    }
+
+    //  candidate exists?
+    const candidate = await prisma.user.findUnique({ where: { email } });
+    if (!candidate) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    //  candidate already a member?
+    const existingMember = await prisma.teamMember.findUnique({
+      where: { teamId_userId: { teamId, userId: candidate.id } }
+    });
+    if (existingMember) {
+      return res.status(400).json({ message: 'User is already a member' });
+    }
+
+    //  team full?
+    const memberCount = await prisma.teamMember.count({ where: { teamId } });
+    if (memberCount >= team.maxSize) {
+      return res.status(400).json({ message: 'Team is already full' });
+    }
+
+    // already invited?
+    const existingInvite = await prisma.match.findUnique({
+      where: { teamId_receiverId: { teamId, receiverId: candidate.id } }
+    });
+    if (existingInvite) {
+      return res.status(400).json({ message: 'User already invited' });
+    }
+
+    //  create the pending invite
+    const match = await prisma.match.create({
+      data: {
+        teamId,
+        senderId: userId!,
+        receiverId: candidate.id,
+        score: 0,
+        status: 'PENDING'
+      }
+    });
+
+    res.status(201).json({ message: 'Invite sent successfully', match });
+
+  } catch (error) {
+    res.status(500).json({ message: 'Error sending invite' });
+  }
+};
