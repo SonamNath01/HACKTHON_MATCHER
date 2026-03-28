@@ -9,19 +9,19 @@ export const getMatches = async (req: Request, res: Response) => {
   const userId = req.user?.id;
 
   try {
-    // Step 1 — team exists?
-    const team = await prisma.team.findUnique({ where: { id: teamId } });
+   
+    const team = await prisma.team.findUnique({ where: { id: teamId } });       //team exists
     if (!team) {
       return res.status(404).json({ message: 'Team not found' });
     }
 
-    // Step 2 — requester is the leader?
+
     if (team.leaderId !== userId) {
-      return res.status(403).json({ message: 'Only the team leader can view matches' });
+      return res.status(403).json({ message: 'Only the team leader can view matches' });    // requester is the leader
     }
 
-    // Step 3 — run the algorithm
-    const matches = await calculateMatches(teamId);
+   
+    const matches = await calculateMatches(teamId);       //algo run
     res.status(200).json({ matches });
 
   } catch (error) {
