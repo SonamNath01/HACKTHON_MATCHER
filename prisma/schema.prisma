@@ -1,8 +1,6 @@
-
 generator client {
   provider = "prisma-client-js"
 }
-
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
@@ -13,6 +11,9 @@ model User {
   name             String
   email            String           @unique
   password         String
+  bio              String?
+  githubUrl        String?
+  portfolioUrl     String?
   timezoneOffset   Int              @default(0)
   availability     AvailabilityType @default(FULL_TIME)
   reliabilityScore Int              @default(50)
@@ -21,13 +22,14 @@ model User {
   memberOfTeams    TeamMember[]
   sentMatches      Match[]          @relation("Sender")
   receivedMatches  Match[]          @relation("Receiver")
+  notifications    Notification[]
   createdAt        DateTime         @default(now())
 }
 
 model Skill {
-  id            String               @id @default(uuid())
-  name          String               @unique
-  users         UserSkill[]
+  id              String               @id @default(uuid())
+  name            String               @unique
+  users           UserSkill[]
   requiredByTeams TeamRequiredSkill[]
 }
 
@@ -41,10 +43,22 @@ model UserSkill {
   @@id([userId, skillId])
 }
 
+model Hackathon {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  startDate DateTime
+  endDate   DateTime
+  website   String?
+  teams     Team[]
+  createdAt DateTime @default(now())
+}
+
 model Team {
   id             String               @id @default(uuid())
   name           String
-  hackathonName  String
+  description    String?
+  hackathonId    String
+  hackathon      Hackathon            @relation(fields: [hackathonId], references: [id])
   leaderId       String
   maxSize        Int                  @default(4)
   status         TeamStatus           @default(FORMING)
@@ -88,6 +102,15 @@ model Match {
   createdAt  DateTime    @default(now())
 
   @@unique([teamId, receiverId])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  message   String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
 }
 
 enum AvailabilityType {
