@@ -2,33 +2,35 @@ import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 export const createTeam = async (req: Request, res: Response) => {
-  const { name, hackathonName, requiredSkills } = req.body;
+  // change hackathonName to hackathonId
+  const { name, description, hackathonId, requiredSkills } = req.body;
   const userId = req.user?.id;
 
   try {
+   
+    const hackathon = await prisma.hackathon.findUnique({ where: { id: hackathonId } });
+    if (!hackathon) {
+      return res.status(404).json({ message: 'Hackathon not found' });
+    }
+
     const team = await prisma.team.create({
       data: {
         name,
-        hackathonName,
+        description,
+        hackathonId,        
         leaderId: userId!,
         requiredSkills: {
           create: requiredSkills.map((skillId: string) => ({ skillId }))
         }
       },
-  
       include: {
-        requiredSkills: {
-          include: { skill: true }
-        }
+        requiredSkills: { include: { skill: true } },
+        hackathon: true   
       }
     });
 
-    // Leader automatically becomes a team member
     await prisma.teamMember.create({
-      data: {
-        teamId: team.id,
-        userId: userId!,
-      }
+      data: { teamId: team.id, userId: userId! }
     });
 
     res.status(201).json({ team });
