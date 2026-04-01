@@ -1,13 +1,14 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
+import { calculateSingleMatch } from '../algorithm/matching';
+
 const prisma = new PrismaClient();
+
 export const createTeam = async (req: Request, res: Response) => {
-  // change hackathonName to hackathonId
   const { name, description, hackathonId, requiredSkills } = req.body;
   const userId = req.user?.id;
 
   try {
-   
     const hackathon = await prisma.hackathon.findUnique({ where: { id: hackathonId } });
     if (!hackathon) {
       return res.status(404).json({ message: 'Hackathon not found' });
@@ -17,7 +18,7 @@ export const createTeam = async (req: Request, res: Response) => {
       data: {
         name,
         description,
-        hackathonId,        
+        hackathonId,
         leaderId: userId!,
         requiredSkills: {
           create: requiredSkills.map((skillId: string) => ({ skillId }))
@@ -25,7 +26,7 @@ export const createTeam = async (req: Request, res: Response) => {
       },
       include: {
         requiredSkills: { include: { skill: true } },
-        hackathon: true   
+        hackathon: true
       }
     });
 
@@ -39,14 +40,14 @@ export const createTeam = async (req: Request, res: Response) => {
     res.status(500).json({ message: 'Error creating team' });
   }
 };
+
 export const getAllTeams = async (req: Request, res: Response) => {
   try {
     const teams = await prisma.team.findMany({
       include: {
-        requiredSkills: {
-          include: { skill: true }
-        },
-        members: true
+        requiredSkills: { include: { skill: true } },
+        members: true,
+        hackathon: true
       }
     });
     res.status(200).json({ teams });
@@ -54,18 +55,16 @@ export const getAllTeams = async (req: Request, res: Response) => {
     res.status(500).json({ message: 'Error fetching teams' });
   }
 };
+
 export const getTeam = async (req: Request, res: Response) => {
   const id = req.params.id as string;
   try {
     const team = await prisma.team.findUnique({
       where: { id },
       include: {
-        requiredSkills: {
-          include: { skill: true }
-        },
-        members: {
-          include: { user: true }  //  need member names
-        }
+        requiredSkills: { include: { skill: true } },
+        members: { include: { user: true } },
+        hackathon: true
       }
     });
 
@@ -79,22 +78,18 @@ export const getTeam = async (req: Request, res: Response) => {
     res.status(500).json({ message: 'Error fetching team' });
   }
 };
+
 export const getMyTeams = async (req: Request, res: Response) => {
   const userId = req.user?.id;
   try {
     const teams = await prisma.team.findMany({
       where: {
-        members: {
-          some: { userId }
-        }
-      },  
+        members: { some: { userId } }
+      },
       include: {
-        requiredSkills: {
-          include: { skill: true }
-        }, 
-        members: {
-          include: { user: true }
-        }
+        requiredSkills: { include: { skill: true } },
+        members: { include: { user: true } },
+        hackathon: true
       }
     });
     res.status(200).json({ teams });
@@ -102,37 +97,39 @@ export const getMyTeams = async (req: Request, res: Response) => {
     res.status(500).json({ message: 'Error fetching your teams' });
   }
 };
+
 export const updateTeamStatus = async (req: Request, res: Response) => {
   const id = req.params.id as string;
   const { status } = req.body;
   const userId = req.user?.id;
 
   try {
-    // check team exists
     const team = await prisma.team.findUnique({ where: { id } });
     if (!team) {
       return res.status(404).json({ message: 'Team not found' });
     }
 
-    //  check requester is the leader
     if (team.leaderId !== userId) {
       return res.status(403).json({ message: 'Only the team leader can update status' });
     }
 
-    // update the status
     const updatedTeam = await prisma.team.update({
       where: { id },
       data: { status }
     });
 
-    //  if submitted, reward all members with reliability score
     if (status === 'SUBMITTED') {
-      const members = await prisma.teamMember.findMany({ where: { teamId: id } });
+      const members = await prisma.teamMember.findMany({
+        where: { teamId: id },
+        include: { user: true }
+      });
 
       for (const member of members) {
         await prisma.user.update({
           where: { id: member.userId },
-          data: { reliabilityScore: { increment: 10 } }
+          data: {
+            reliabilityScore: Math.min(100, member.user.reliabilityScore + 10)
+          }
         });
       }
     }
@@ -143,29 +140,34 @@ export const updateTeamStatus = async (req: Request, res: Response) => {
     res.status(500).json({ message: 'Error updating team status' });
   }
 };
+
 export const inviteToTeam = async (req: Request, res: Response) => {
   const teamId = req.params.id as string;
   const { email } = req.body;
   const userId = req.user?.id;
 
   try {
-    //team exists?
-    const team = await prisma.team.findUnique({ where: { id: teamId } });
+    // team exists?
+    const team = await prisma.team.findUnique({
+      where: { id: teamId },
+      include: { hackathon: true }
+    });
     if (!team) {
       return res.status(404).json({ message: 'Team not found' });
     }
-    //requester is the leader?
+
+    // requester is the leader?
     if (team.leaderId !== userId) {
       return res.status(403).json({ message: 'Only the team leader can invite members' });
     }
 
-    //  candidate exists?
+    // candidate exists?
     const candidate = await prisma.user.findUnique({ where: { email } });
     if (!candidate) {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    //  candidate already a member?
+    // candidate already a member?
     const existingMember = await prisma.teamMember.findUnique({
       where: { teamId_userId: { teamId, userId: candidate.id } }
     });
@@ -173,7 +175,7 @@ export const inviteToTeam = async (req: Request, res: Response) => {
       return res.status(400).json({ message: 'User is already a member' });
     }
 
-    //  team full?
+    // team full?
     const memberCount = await prisma.teamMember.count({ where: { teamId } });
     if (memberCount >= team.maxSize) {
       return res.status(400).json({ message: 'Team is already full' });
@@ -187,18 +189,28 @@ export const inviteToTeam = async (req: Request, res: Response) => {
       return res.status(400).json({ message: 'User already invited' });
     }
 
-    //  create the pending invite
-    const match = await prisma.match.create({
-      data: {
-        teamId,
-        senderId: userId!,
-        receiverId: candidate.id,
-        score: 0,
-        status: 'PENDING'
-      }
-    });
+    // calculate score then create match + notification atomically
+    const score = await calculateSingleMatch(teamId, candidate.id);
 
-    res.status(201).json({ message: 'Invite sent successfully', match });
+    await prisma.$transaction([
+      prisma.match.create({
+        data: {
+          teamId,
+          senderId: userId!,
+          receiverId: candidate.id,
+          score,
+          status: 'PENDING'
+        }
+      }),
+      prisma.notification.create({
+        data: {
+          userId: candidate.id,
+          message: `You have been invited to join team "${team.name}" for hackathon "${team.hackathon.name}".`
+        }
+      })
+    ]);
+
+    res.status(201).json({ message: 'Invite sent successfully' });
 
   } catch (error) {
     res.status(500).json({ message: 'Error sending invite' });

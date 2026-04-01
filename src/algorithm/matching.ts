@@ -80,3 +80,46 @@ export const calculateMatches = async (teamId: string): Promise<MatchResult[]> =
   //sort highest score first
   return results.sort((a, b) => b.score - a.score);
 };
+
+export const calculateSingleMatch = async (
+  teamId: string,
+  userId: string
+): Promise<number> => {
+  
+  const team = await prisma.team.findUnique({
+    where: { id: teamId },
+    include: { requiredSkills: true, leader: true }
+  });
+  if (!team) throw new Error('Team not found');
+
+  const candidate = await prisma.user.findUnique({
+    where: { id: userId },
+    include: { skills: true }
+  });
+  if (!candidate) throw new Error('Candidate not found');
+
+  // same exact logic as calculateMatches, just for one person
+  const requiredSkillIds = team.requiredSkills.map(s => s.skillId);
+  const candidateSkillIds = candidate.skills.map(s => s.skillId);
+  const matchingSkills = requiredSkillIds.filter(id => candidateSkillIds.includes(id));
+  const skillScore = requiredSkillIds.length === 0 ? 40 : (matchingSkills.length / requiredSkillIds.length) * 40;
+
+  const reliabilityScore = (candidate.reliabilityScore / 100) * 30;
+
+  const timezoneDiff = Math.abs(team.leader.timezoneOffset - candidate.timezoneOffset);
+  const timezoneScore = Math.max(0, 20 - (timezoneDiff * 2));
+
+  let commitmentScore = 0;
+  if (team.leader.availability === candidate.availability) {
+    commitmentScore = 10;
+  } else if (
+    (team.leader.availability === 'FULL_TIME' && candidate.availability === 'PART_TIME') ||
+    (team.leader.availability === 'PART_TIME' && candidate.availability === 'FULL_TIME') ||
+    (team.leader.availability === 'PART_TIME' && candidate.availability === 'WEEKENDS_ONLY') ||
+    (team.leader.availability === 'WEEKENDS_ONLY' && candidate.availability === 'PART_TIME')
+  ) {
+    commitmentScore = 5;
+  }
+
+  return Math.round(skillScore + reliabilityScore + timezoneScore + commitmentScore);
+};
