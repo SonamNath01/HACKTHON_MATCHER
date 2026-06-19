@@ -21,7 +21,7 @@ export default function DashboardPage() {
           api.get("/api/teams/my"),
           api.get("/api/notifications"),
         ])
-        setMyTeams(teamsRes.data)
+        setMyTeams(teamsRes.data.teams || [])
         setNotifications(notifRes.data.notifications || [])
       } catch (err) {
         setError("Failed to load dashboard data.")
