@@ -23,7 +23,8 @@ export const register = async (req: Request, res: Response) => {
             }
         });
         const token = signToken(user.id);
-        res.status(201).json({token});
+        const { password: _, ...userWithoutPassword } = user;
+        res.status(201).json({ token, user: userWithoutPassword });
     } catch (error) {
         res.status(500).json({message: 'Error registering user'});
     }

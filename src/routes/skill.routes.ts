@@ -1,12 +1,11 @@
 import { Router } from "express"
-import { PrismaClient } from "@prisma/client"
+import { protect } from "../middleware/protect"
+import { getAllSkills, addUserSkill, removeUserSkill } from "../controllers/skill.controller"
 
 const router = Router()
-const prisma = new PrismaClient()
 
-router.get("/", async (req, res) => {
-  const skills = await prisma.skill.findMany()
-  res.json(skills)
-})
+router.get("/", getAllSkills)
+router.post("/me", protect, addUserSkill)
+router.delete("/me/:skillId", protect, removeUserSkill)
 
 export default router

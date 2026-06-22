@@ -32,7 +32,12 @@ export const useAuthStore = create<AuthState>((set) => ({
     const token = localStorage.getItem('token')
     const user = localStorage.getItem('user')
     if (token && user) {
-      set({ token, user: JSON.parse(user), isAuthenticated: true })
+      try {
+        set({ token, user: JSON.parse(user), isAuthenticated: true })
+      } catch {
+        localStorage.removeItem('token')
+        localStorage.removeItem('user')
+      }
     }
   }
 }))

@@ -26,7 +26,12 @@ export default function TeamsPage() {
   }, [])
 
   if (loading) {
-    return <div className="p-10 text-sm text-muted-foreground">Loading teams...</div>
+    return (
+      <div className="p-10 flex items-center gap-2.5 text-sm text-muted-foreground">
+        <span className="size-3.5 rounded-full border-2 border-accent/30 border-t-accent animate-spin" />
+        Loading teams...
+      </div>
+    )
   }
   if (error) {
     return (
@@ -39,10 +44,10 @@ export default function TeamsPage() {
   }
 
   return (
-    <div className="p-8 sm:p-10 max-w-4xl">
-      <div className="flex items-center justify-between mb-8">
+    <div className="p-6 sm:p-10 max-w-4xl mx-auto">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
         <div>
-          <h1 className="font-heading text-2xl font-bold tracking-tight">
+          <h1 className="font-heading text-2xl sm:text-3xl font-bold tracking-tight">
             Discover teams
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
@@ -51,14 +56,14 @@ export default function TeamsPage() {
         </div>
         <Link
           href="/teams/create"
-          className="text-sm font-medium bg-accent text-accent-foreground rounded-md px-4 py-2 hover:opacity-90 transition-opacity"
+          className="text-sm font-medium bg-accent text-accent-foreground rounded-md px-4 py-2 shadow-sm shadow-accent/20 hover:opacity-90 hover:shadow-md hover:shadow-accent/30 transition-all shrink-0 self-start sm:self-auto"
         >
           + Create team
         </Link>
       </div>
 
       {teams.length === 0 ? (
-        <div className="border border-border/60 rounded-lg px-6 py-12 text-center">
+        <div className="border border-dashed border-border/60 rounded-xl px-6 py-14 text-center bg-card/40">
           <p className="text-sm text-muted-foreground mb-4">
             No open teams right now.
           </p>
@@ -75,22 +80,22 @@ export default function TeamsPage() {
             <Link
               key={team.id}
               href={`/teams/${team.id}`}
-              className="block bg-card border border-border/60 hover:border-accent/50 rounded-lg p-5 transition-colors"
+              className="block bg-card border border-border/60 hover:border-accent/50 hover:shadow-lg hover:shadow-black/10 hover:-translate-y-0.5 rounded-xl p-5 transition-all"
             >
-              <div className="flex items-start justify-between mb-2">
+              <div className="flex items-start justify-between gap-3 mb-2">
                 <h2 className="font-medium text-sm">{team.name}</h2>
-                <span className="text-xs font-medium rounded-full px-2.5 py-0.5 border text-accent bg-accent/10 border-accent/30">
+                <span className="text-xs font-medium rounded-full px-2.5 py-0.5 border text-accent bg-accent/10 border-accent/30 shrink-0">
                   {team.status}
                 </span>
               </div>
 
               {team.description && (
-                <p className="text-xs text-muted-foreground mb-3 line-clamp-2">
+                <p className="text-xs text-muted-foreground mb-3 line-clamp-2 leading-relaxed">
                   {team.description}
                 </p>
               )}
 
-              <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <div className="flex items-center justify-between text-xs text-muted-foreground pt-3 border-t border-border/60">
                 <span>{team.hackathon?.name || "No hackathon"}</span>
                 <span>{team.members?.length ?? 0} / {team.maxSize} members</span>
               </div>

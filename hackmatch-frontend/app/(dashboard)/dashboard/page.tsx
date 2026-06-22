@@ -47,16 +47,21 @@ export default function DashboardPage() {
   const openTeams = myTeams.filter((t) => t.status === "FORMING")
 
   if (loading) {
-    return <div className="p-10 text-sm text-muted-foreground">Loading dashboard...</div>
+    return (
+      <div className="p-10 flex items-center gap-2.5 text-sm text-muted-foreground">
+        <span className="size-3.5 rounded-full border-2 border-accent/30 border-t-accent animate-spin" />
+        Loading dashboard...
+      </div>
+    )
   }
 
   return (
-    <div className="p-8 sm:p-10 max-w-5xl">
+    <div className="p-6 sm:p-10 max-w-5xl mx-auto">
       <div className="mb-10">
-        <h1 className="font-heading text-3xl font-bold tracking-tight">
+        <h1 className="font-heading text-3xl sm:text-4xl font-bold tracking-tight">
           Welcome back, {user?.name?.split(" ")[0] || "there"}.
         </h1>
-        <p className="text-muted-foreground text-sm mt-1">
+        <p className="text-muted-foreground text-sm sm:text-base mt-1.5">
           Here&apos;s what&apos;s happening with your teams.
         </p>
       </div>
@@ -67,7 +72,7 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-px bg-border rounded-lg overflow-hidden border border-border mb-10">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-px bg-border rounded-xl overflow-hidden border border-border mb-10 shadow-sm">
         <StatCard label="Your teams" value={myTeams.length} />
         <StatCard label="Open teams" value={openTeams.length} accent={openTeams.length > 0} />
         <StatCard label="Unread" value={unread} accent={unread > 0} />
@@ -79,7 +84,7 @@ export default function DashboardPage() {
             <h2 className="text-xs uppercase tracking-wide text-muted-foreground font-medium">
               My teams
             </h2>
-            <Link href="/teams/create" className="text-xs text-accent hover:opacity-80 font-medium">
+            <Link href="/teams/create" className="text-xs text-accent hover:opacity-80 font-medium transition-opacity">
               + New
             </Link>
           </div>
@@ -92,7 +97,7 @@ export default function DashboardPage() {
                 <Link
                   key={team.id}
                   href={`/teams/${team.id}`}
-                  className="block bg-card border border-border/60 hover:border-border rounded-md px-4 py-3 transition-colors"
+                  className="block bg-card border border-border/60 hover:border-accent/40 hover:shadow-md hover:shadow-black/10 rounded-lg px-4 py-3 transition-all"
                 >
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium">{team.name}</span>
@@ -123,10 +128,10 @@ export default function DashboardPage() {
                 <div
                   key={notif.id}
                   onClick={() => !notif.read && markRead(notif.id)}
-                  className={`rounded-md px-4 py-3 border transition-colors ${
+                  className={`rounded-lg px-4 py-3 border transition-all ${
                     notif.read
                       ? "bg-card border-border/60 text-muted-foreground"
-                      : "bg-accent/10 border-accent/30 cursor-pointer hover:bg-accent/20"
+                      : "bg-accent/10 border-accent/30 cursor-pointer hover:bg-accent/20 hover:shadow-md hover:shadow-accent/10"
                   }`}
                 >
                   <p className="text-sm leading-snug">{notif.message}</p>
@@ -158,8 +163,8 @@ export default function DashboardPage() {
 
 function StatCard({ label, value, accent }: { label: string; value: number; accent?: boolean }) {
   return (
-    <div className="bg-card px-5 py-5">
-      <div className="text-xs uppercase tracking-wide text-muted-foreground mb-2">{label}</div>
+    <div className="bg-card px-5 py-5 transition-colors hover:bg-muted/30">
+      <div className="text-xs uppercase tracking-wide text-muted-foreground mb-2 font-medium">{label}</div>
       <div className={`font-heading text-3xl font-bold ${accent ? "text-accent" : "text-foreground"}`}>
         {value}
       </div>
@@ -182,7 +187,7 @@ function StatusBadge({ status }: { status: string }) {
 
 function EmptyState({ message, actionLabel, actionHref }: { message: string; actionLabel?: string; actionHref?: string }) {
   return (
-    <div className="border border-border/60 rounded-md px-6 py-8 text-center">
+    <div className="border border-dashed border-border/60 rounded-lg px-6 py-9 text-center bg-card/40">
       <p className="text-sm text-muted-foreground mb-3">{message}</p>
       {actionLabel && actionHref && (
         <Link
@@ -198,7 +203,7 @@ function EmptyState({ message, actionLabel, actionHref }: { message: string; act
 
 function QuickAction({ href, label }: { href: string; label: string }) {
   return (
-    <Link href={href} className="text-sm border border-border rounded-md px-4 py-2 hover:border-accent hover:text-accent transition-colors">
+    <Link href={href} className="text-sm border border-border rounded-md px-4 py-2 hover:border-accent hover:text-accent hover:bg-accent/5 transition-colors">
       {label}
     </Link>
   )

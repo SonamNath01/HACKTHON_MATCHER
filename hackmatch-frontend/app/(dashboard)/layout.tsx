@@ -30,7 +30,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }, [ready, isAuthenticated])
 
   if (!ready || !isAuthenticated) {
-    return <div>Loading...</div>
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <div className="flex items-center gap-2.5 text-sm text-muted-foreground">
+          <span className="size-3.5 rounded-full border-2 border-accent/30 border-t-accent animate-spin" />
+          Loading...
+        </div>
+      </div>
+    )
   }
 
   const handleLogout = () => {
@@ -39,26 +46,52 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   return (
-    <div>
-      <nav>
-        <Link href="/dashboard">HackMatch</Link>
-        <div>
-          {NAV_LINKS.map(({ href, label }) => (
-            <Link
-              key={href}
-              href={href}
-              style={{ fontWeight: pathname === href ? "bold" : "normal" }}
-            >
-              {label}
-            </Link>
-          ))}
+    <div className="flex-1 flex flex-col">
+      <nav className="sticky top-0 z-20 border-b border-border bg-background/80 backdrop-blur-md px-4 sm:px-6 py-3 flex items-center gap-4 sm:gap-6">
+        <Link
+          href="/dashboard"
+          className="font-heading font-bold text-lg tracking-tight shrink-0 hover:text-accent transition-colors"
+        >
+          HackMatch
+        </Link>
+
+        <div className="flex items-center gap-1 overflow-x-auto flex-1 [scrollbar-width:none]">
+          {NAV_LINKS.map(({ href, label }) => {
+            const isActive = pathname === href
+            return (
+              <Link
+                key={href}
+                href={href}
+                className={`relative shrink-0 text-sm rounded-md px-3 py-1.5 transition-colors ${
+                  isActive
+                    ? "text-foreground font-medium bg-muted"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+                }`}
+              >
+                {label}
+              </Link>
+            )
+          })}
         </div>
-        <div>
-          <span>{user?.name}</span>
-          <button onClick={handleLogout}>Logout</button>
+
+        <div className="flex items-center gap-3 shrink-0">
+          <div className="hidden sm:flex items-center gap-2">
+            <span className="size-7 rounded-full bg-accent/10 border border-accent/30 flex items-center justify-center text-xs font-bold text-accent">
+              {user?.name?.[0]?.toUpperCase() || "?"}
+            </span>
+            <span className="text-sm text-muted-foreground max-w-[10rem] truncate">
+              {user?.name}
+            </span>
+          </div>
+          <button
+            onClick={handleLogout}
+            className="text-sm font-medium border border-border rounded-md px-3 py-1.5 hover:border-destructive/50 hover:text-destructive transition-colors"
+          >
+            Logout
+          </button>
         </div>
       </nav>
-      <main>
+      <main className="flex-1">
         {children}
       </main>
     </div>

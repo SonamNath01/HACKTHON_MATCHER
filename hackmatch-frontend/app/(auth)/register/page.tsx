@@ -36,18 +36,18 @@ export default function RegisterPage() {
     <div className="flex-1 flex items-center justify-center px-6 py-16">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
-          <Link href="/" className="font-heading font-bold text-lg tracking-tight">
+          <Link href="/" className="font-heading font-bold text-lg tracking-tight hover:text-accent transition-colors">
             HackMatch
           </Link>
           <h1 className="font-heading text-2xl font-bold tracking-tight mt-6">
             Create your account
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">
+          <p className="text-sm text-muted-foreground mt-1.5">
             Start matching with hackathon teams.
           </p>
         </div>
 
-        <div className="bg-card border border-border rounded-lg p-6">
+        <div className="bg-card border border-border rounded-xl p-6 shadow-lg shadow-black/20">
           <div className="mb-4">
             <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
               Full name
@@ -57,7 +57,7 @@ export default function RegisterPage() {
               onChange={(e) => setName(e.target.value)}
               placeholder="Jane Doe"
               type="text"
-              className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm outline-none focus:border-accent focus:ring-1 focus:ring-accent/30 transition-colors"
+              className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20 transition-shadow"
             />
           </div>
 
@@ -70,7 +70,7 @@ export default function RegisterPage() {
               onChange={(e) => setEmail(e.target.value)}
               placeholder="jane@dev.io"
               type="email"
-              className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm outline-none focus:border-accent focus:ring-1 focus:ring-accent/30 transition-colors"
+              className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20 transition-shadow"
             />
           </div>
 
@@ -85,7 +85,7 @@ export default function RegisterPage() {
               onKeyDown={(e) => e.key === "Enter" && canSubmit && handleSubmit()}
               placeholder="••••••••"
               type="password"
-              className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm outline-none focus:border-accent focus:ring-1 focus:ring-accent/30 transition-colors"
+              className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20 transition-shadow"
             />
           </div>
 
@@ -98,8 +98,11 @@ export default function RegisterPage() {
           <button
             onClick={handleSubmit}
             disabled={!canSubmit}
-            className="w-full bg-accent text-accent-foreground font-medium text-sm rounded-md py-2.5 hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
+            className="w-full flex items-center justify-center gap-2 bg-accent text-accent-foreground font-medium text-sm rounded-md py-2.5 shadow-sm shadow-accent/20 hover:opacity-90 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none"
           >
+            {loading && (
+              <span className="size-3.5 rounded-full border-2 border-accent-foreground/30 border-t-accent-foreground animate-spin" />
+            )}
             {loading ? "Creating account..." : "Create account"}
           </button>
         </div>
