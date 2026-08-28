@@ -1,7 +1,9 @@
 import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 
-const prisma = new PrismaClient();
+// Safety cap so a long-lived account's inbox can't be loaded unbounded.
+const MAX_NOTIFICATIONS = 100;
+
 //fetch all notifications for logged in user
 export const getNotifications = async (req: Request, res: Response) => {
   const userId = req.user?.id;
@@ -9,7 +11,8 @@ export const getNotifications = async (req: Request, res: Response) => {
   try {
     const notifications = await prisma.notification.findMany({
       where: { userId },
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: 'desc' },
+      take: MAX_NOTIFICATIONS
     });
 
     res.status(200).json({ notifications });

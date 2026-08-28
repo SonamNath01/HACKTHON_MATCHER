@@ -27,8 +27,8 @@ export default function CreateTeamPage() {
           api.get("/api/hackathons"),
           api.get("/api/skills"),
         ])
-        setHackathons(hackathonsRes.data)
-        setSkills(skillsRes.data)
+        setHackathons(hackathonsRes.data.hackathons || [])
+        setSkills(skillsRes.data.skills || [])
       } catch (err) {
         setError("Failed to load form data.")
       } finally {

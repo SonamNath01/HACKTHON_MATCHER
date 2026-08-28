@@ -104,5 +104,4 @@ export type AuthResponse = {
 
 export type NotificationsResponse = {
   notifications: Notification[]
-  unreadCount: number
 }

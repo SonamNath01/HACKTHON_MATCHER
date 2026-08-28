@@ -1,8 +1,10 @@
 import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { calculateSingleMatch } from '../algorithm/matching';
 
-const prisma = new PrismaClient();
+// Safety cap for unbounded list endpoints.
+const MAX_TEAMS = 100;
 
 export const createTeam = async (req: Request, res: Response) => {
   const { name, description, hackathonId, requiredSkills } = req.body;
@@ -48,7 +50,9 @@ export const getAllTeams = async (req: Request, res: Response) => {
         requiredSkills: { include: { skill: true } },
         members: true,
         hackathon: true
-      }
+      },
+      orderBy: { createdAt: 'desc' },
+      take: MAX_TEAMS
     });
     res.status(200).json({ teams });
   } catch (error) {
@@ -58,13 +62,17 @@ export const getAllTeams = async (req: Request, res: Response) => {
 
 export const getTeam = async (req: Request, res: Response) => {
   const id = req.params.id as string;
+  const userId = req.user?.id;
   try {
     const team = await prisma.team.findUnique({
       where: { id },
       include: {
         requiredSkills: { include: { skill: true } },
         members: { include: { user: true } },
-        hackathon: true
+        hackathon: true,
+        // Only the requesting user's own invite for this team — never expose
+        // other candidates' invites/scores to someone viewing the team.
+        matches: { where: { receiverId: userId } }
       }
     });
 
@@ -118,20 +126,26 @@ export const updateTeamStatus = async (req: Request, res: Response) => {
       data: { status }
     });
 
-    if (status === 'SUBMITTED') {
-      const members = await prisma.teamMember.findMany({
-        where: { teamId: id },
-        include: { user: true }
-      });
-
-      for (const member of members) {
-        await prisma.user.update({
-          where: { id: member.userId },
-          data: {
-            reliabilityScore: Math.min(100, member.user.reliabilityScore + 10)
-          }
-        });
-      }
+    // Only apply a reliability adjustment on an actual transition, so
+    // repeated status updates don't keep stacking the same delta.
+    if (status === 'SUBMITTED' && team.status !== 'SUBMITTED') {
+      // A team that actually submits is the strongest positive reliability
+      // signal — bump every member in one statement instead of N round trips.
+      await prisma.$executeRaw`
+        UPDATE "User" u
+        SET "reliabilityScore" = LEAST(100, u."reliabilityScore" + 10)
+        FROM "TeamMember" tm
+        WHERE tm."userId" = u.id AND tm."teamId" = ${id}
+      `;
+    } else if (status === 'DISBANDED' && team.status !== 'DISBANDED') {
+      // A team that disbands without submitting is a mild negative signal
+      // for everyone who was on it.
+      await prisma.$executeRaw`
+        UPDATE "User" u
+        SET "reliabilityScore" = GREATEST(0, u."reliabilityScore" - 5)
+        FROM "TeamMember" tm
+        WHERE tm."userId" = u.id AND tm."teamId" = ${id}
+      `;
     }
 
     res.status(200).json({ team: updatedTeam });
@@ -213,6 +227,12 @@ export const inviteToTeam = async (req: Request, res: Response) => {
     res.status(201).json({ message: 'Invite sent successfully' });
 
   } catch (error) {
+    // Two concurrent invites to the same candidate can both pass the
+    // pre-check above and then collide on the unique (teamId, receiverId)
+    // constraint — surface that as a clean 400 instead of a 500.
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      return res.status(400).json({ message: 'User already invited' });
+    }
     res.status(500).json({ message: 'Error sending invite' });
   }
 };

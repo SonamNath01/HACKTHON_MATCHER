@@ -26,7 +26,7 @@ export default function ProfilePage() {
           api.get("/api/skills"),
         ])
         setProfile(profileRes.data.user || profileRes.data)
-        setAllSkills(skillsRes.data || [])
+        setAllSkills(skillsRes.data.skills || [])
       } catch (err) {
         setError("Failed to load profile.")
       } finally {

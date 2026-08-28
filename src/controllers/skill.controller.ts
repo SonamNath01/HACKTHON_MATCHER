@@ -1,14 +1,12 @@
 import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { prisma } from '../lib/prisma';
 
 const PROFICIENCY_LEVELS = ['BEGINNER', 'INTERMEDIATE', 'EXPERT'];
 
 export const getAllSkills = async (req: Request, res: Response) => {
   try {
     const skills = await prisma.skill.findMany();
-    res.status(200).json(skills);
+    res.status(200).json({ skills });
   } catch (error) {
     res.status(500).json({ message: 'Error fetching skills' });
   }

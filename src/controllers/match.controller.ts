@@ -1,8 +1,7 @@
 import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { calculateMatches } from '../algorithm/matching';
-
-const prisma = new PrismaClient();
 
 export const getMatches = async (req: Request, res: Response) => {
   const teamId = req.params.id as string;
@@ -49,43 +48,54 @@ export const respondToInvite = async (req: Request, res: Response) => {
     }
 
     if (status === 'REJECTED') {
-      await prisma.$transaction([
-        prisma.match.update({
-          where: { id: matchId },
-          data: { status }
-        })
-      ]);
+      await prisma.match.update({
+        where: { id: matchId },
+        data: { status }
+      });
     }
 
     if (status === 'ACCEPTED') {
-      // team still exists?
-      const team = await prisma.team.findUnique({ where: { id: match.teamId } });
-      if (!team) {
-        return res.status(404).json({ message: 'Team no longer exists' });
-      }
-
-      // team full?
-      const memberCount = await prisma.teamMember.count({ where: { teamId: match.teamId } });
-      if (memberCount >= team.maxSize) {
-        return res.status(400).json({ message: 'Team is already full' });
-      }
-
-      // all three operations succeed or none do
-      await prisma.$transaction([
-        prisma.match.update({
-          where: { id: matchId },
-          data: { status }
-        }),
-        prisma.teamMember.create({
-          data: { teamId: match.teamId, userId: userId! }
-        }),
-        prisma.notification.create({
-          data: {
-            userId: match.senderId,
-            message: `Your invite to join team ${team.name} was accepted!`
+      try {
+        // Re-check capacity and join inside one serializable transaction so two
+        // concurrent accepts can't both squeeze past the maxSize check.
+        await prisma.$transaction(async (tx) => {
+          const team = await tx.team.findUnique({ where: { id: match.teamId } });
+          if (!team) {
+            throw new Error('TEAM_NOT_FOUND');
           }
-        })
-      ]);
+
+          const memberCount = await tx.teamMember.count({ where: { teamId: match.teamId } });
+          if (memberCount >= team.maxSize) {
+            throw new Error('TEAM_FULL');
+          }
+
+          await tx.match.update({
+            where: { id: matchId },
+            data: { status }
+          });
+          await tx.teamMember.create({
+            data: { teamId: match.teamId, userId: userId! }
+          });
+          await tx.notification.create({
+            data: {
+              userId: match.senderId,
+              message: `Your invite to join team ${team.name} was accepted!`
+            }
+          });
+        }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+      } catch (txError) {
+        if (txError instanceof Error && txError.message === 'TEAM_NOT_FOUND') {
+          return res.status(404).json({ message: 'Team no longer exists' });
+        }
+        if (txError instanceof Error && txError.message === 'TEAM_FULL') {
+          return res.status(400).json({ message: 'Team is already full' });
+        }
+        // Serializable write-conflict: someone else joined at the same instant.
+        if (txError instanceof Prisma.PrismaClientKnownRequestError && txError.code === 'P2034') {
+          return res.status(409).json({ message: 'Team filled up just now, please try again' });
+        }
+        throw txError;
+      }
     }
 
     res.status(200).json({ message: `Invite ${status}` });
