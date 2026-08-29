@@ -227,12 +227,17 @@ export const inviteToTeam = async (req: Request, res: Response) => {
       return res.status(400).json({ message: 'Team is already full' });
     }
 
-    // already invited?
+    // already invited, or already has a pending join request on this team?
+    // (the same [teamId, receiverId] row covers both — see the Match model comment)
     const existingInvite = await prisma.match.findUnique({
       where: { teamId_receiverId: { teamId, receiverId: candidate.id } }
     });
     if (existingInvite) {
-      return res.status(400).json({ message: 'User already invited' });
+      return res.status(400).json({
+        message: existingInvite.type === 'JOIN_REQUEST'
+          ? 'This user already asked to join — respond to their join request instead'
+          : 'User already invited'
+      });
     }
 
     // calculate score then create match + notification atomically
@@ -266,5 +271,88 @@ export const inviteToTeam = async (req: Request, res: Response) => {
       return res.status(400).json({ message: 'User already invited' });
     }
     res.status(500).json({ message: 'Error sending invite' });
+  }
+};
+
+// The other direction of team matching: a candidate asking to join a team,
+// instead of a leader inviting them. Reuses the same Match model — this row
+// looks exactly like an invite except type: 'JOIN_REQUEST' and
+// senderId === receiverId (the candidate sent it to themselves, addressed at
+// the team) — so every downstream piece of code that already reads
+// Match.receiverId as "the candidate" keeps working unmodified.
+export const requestToJoinTeam = async (req: Request, res: Response) => {
+  const teamId = req.params.id as string;
+  const userId = req.user?.id;
+
+  try {
+    const team = await prisma.team.findUnique({ where: { id: teamId } });
+    if (!team) {
+      return res.status(404).json({ message: 'Team not found' });
+    }
+
+    if (team.status !== 'FORMING') {
+      return res.status(400).json({ message: 'This team is not currently accepting join requests' });
+    }
+
+    // already a member?
+    const existingMember = await prisma.teamMember.findUnique({
+      where: { teamId_userId: { teamId, userId: userId! } }
+    });
+    if (existingMember) {
+      return res.status(400).json({ message: 'You are already a member of this team' });
+    }
+
+    // team full?
+    const memberCount = await prisma.teamMember.count({ where: { teamId } });
+    if (memberCount >= team.maxSize) {
+      return res.status(400).json({ message: 'This team is now full' });
+    }
+
+    // already invited, or already requested?
+    const existingMatch = await prisma.match.findUnique({
+      where: { teamId_receiverId: { teamId, receiverId: userId! } }
+    });
+    if (existingMatch) {
+      return res.status(400).json({
+        message: existingMatch.type === 'INVITATION'
+          ? 'This team already invited you — check your invitations'
+          : 'You already requested to join this team'
+      });
+    }
+
+    const [candidate, score] = await Promise.all([
+      prisma.user.findUnique({ where: { id: userId }, select: { name: true } }),
+      calculateSingleMatch(teamId, userId!),
+    ]);
+
+    await prisma.$transaction([
+      prisma.match.create({
+        data: {
+          teamId,
+          senderId: userId!,
+          receiverId: userId!,
+          score,
+          status: 'PENDING',
+          type: 'JOIN_REQUEST',
+        }
+      }),
+      prisma.notification.create({
+        data: {
+          userId: team.leaderId,
+          message: `${candidate?.name || 'Someone'} requested to join your team "${team.name}".`
+        }
+      })
+    ]);
+
+    res.status(201).json({ message: 'Join request sent successfully' });
+
+  } catch (error) {
+    // Two rapid clicks (or two tabs) can both pass the pre-check above and
+    // then collide on the same unique (teamId, receiverId) constraint used
+    // by invites — surface that as a clean 400 instead of a 500.
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      return res.status(400).json({ message: 'You already requested to join this team' });
+    }
+    res.status(500).json({ message: 'Error sending join request' });
   }
 };

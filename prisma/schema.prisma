@@ -89,6 +89,14 @@ model TeamMember {
   @@unique([teamId, userId])
 }
 
+// A Match represents one active relationship between a candidate and a team,
+// in either direction:
+//   INVITATION   — senderId = the team leader, receiverId = the candidate
+//   JOIN_REQUEST — senderId = the candidate,    receiverId = the candidate (self)
+// receiverId always identifies "the candidate", regardless of direction, so
+// the existing (teamId, receiverId) uniqueness rule doubles as the conflict
+// rule: a candidate can only ever have one active relationship (of either
+// type) with a given team.
 model Match {
   id         String      @id @default(uuid())
   teamId     String
@@ -96,6 +104,7 @@ model Match {
   receiverId String
   score      Int
   status     MatchStatus @default(PENDING)
+  type       MatchType   @default(INVITATION)
   team       Team        @relation(fields: [teamId], references: [id])
   sender     User        @relation("Sender", fields: [senderId], references: [id])
   receiver   User        @relation("Receiver", fields: [receiverId], references: [id])
@@ -123,6 +132,11 @@ enum MatchStatus {
   PENDING
   ACCEPTED
   REJECTED
+}
+
+enum MatchType {
+  INVITATION
+  JOIN_REQUEST
 }
 
 enum ProficiencyLevel {

@@ -61,15 +61,23 @@ export type Team = {
   createdAt: string
   hackathon: Hackathon
   requiredSkills: TeamRequiredSkill[]
-  members: TeamMember[]
+  // Optional (not every endpoint returns the full list) — every read already
+  // uses `team.members?.length ?? 0`, so this stays safe everywhere.
+  members?: TeamMember[]
   // Only present on GET /api/teams/:id — the leader sees every pending
-  // invite on the team, everyone else sees only their own.
+  // invite/join-request on the team, everyone else sees only their own
+  // (any status) relationship with this team.
   matches?: Match[]
-  // Only present on GET /api/matches/my
+  // Only present on GET /api/matches/my and GET /api/matches/teams
   leader?: User
+  // Only present on GET /api/matches/teams (a lighter member count instead
+  // of the full members array)
+  _count?: { members: number }
 }
 
 // ─── MATCH
+export type MatchType = 'INVITATION' | 'JOIN_REQUEST'
+
 export type Match = {
   id: string
   teamId: string
@@ -77,20 +85,34 @@ export type Match = {
   receiverId: string
   score: number
   status: 'PENDING' | 'ACCEPTED' | 'REJECTED'
+  type: MatchType
   createdAt: string
   team?: Team
   receiver?: User
 }
 
+export type ScoreBreakdown = {
+  skillScore: number
+  reliabilityScore: number
+  timezoneScore: number
+  commitmentScore: number
+}
+
 export type MatchResult = {
   candidate: User
   score: number
-  breakdown: {
-    skillScore: number
-    reliabilityScore: number
-    timezoneScore: number
-    commitmentScore: number
-  }
+  breakdown: ScoreBreakdown
+}
+
+// A team ranked for the current user (GET /api/matches/teams) — the mirror
+// image of MatchResult, plus the user's own existing relationship with that
+// team, if any (so the UI knows whether to offer "Request to join" or show
+// a pending/declined status instead).
+export type TeamMatchResult = {
+  team: Team
+  score: number
+  breakdown: ScoreBreakdown
+  myMatch: { teamId: string; type: MatchType; status: Match['status'] } | null
 }
 
 // ─── NOTIFICATION

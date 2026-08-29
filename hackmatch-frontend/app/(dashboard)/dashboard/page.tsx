@@ -13,16 +13,18 @@ export default function DashboardPage() {
   const [myTeams, setMyTeams] = useState<Team[]>([])
   const [openTeams, setOpenTeams] = useState<Team[]>([])
   const [pendingInvites, setPendingInvites] = useState<Match[]>([])
+  const [pendingJoinRequests, setPendingJoinRequests] = useState<Match[]>([])
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
 
   const loadDashboard = async () => {
     try {
-      const [teamsRes, allTeamsRes, invitesRes, notifRes] = await Promise.all([
+      const [teamsRes, allTeamsRes, invitesRes, joinRequestsRes, notifRes] = await Promise.all([
         api.get("/api/teams/my"),
         api.get("/api/teams"),
         api.get("/api/matches/my"),
+        api.get("/api/matches/my/join-requests"),
         api.get("/api/notifications"),
       ])
       const teams: Team[] = teamsRes.data.teams || []
@@ -35,6 +37,7 @@ export default function DashboardPage() {
         )
       )
       setPendingInvites(invitesRes.data.invites || [])
+      setPendingJoinRequests(joinRequestsRes.data.requests || [])
       setNotifications(notifRes.data.notifications || [])
     } catch (err) {
       setError("Failed to load dashboard data.")
@@ -103,10 +106,11 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-border rounded-xl overflow-hidden border border-border mb-10 shadow-sm">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-px bg-border rounded-xl overflow-hidden border border-border mb-10 shadow-sm">
         <StatCard label="Your teams" value={myTeams.length} />
         <StatCard label="Open teams" value={openTeams.length} accent={openTeams.length > 0} />
         <StatCard label="Pending invites" value={pendingInvites.length} accent={pendingInvites.length > 0} />
+        <StatCard label="Join requests sent" value={pendingJoinRequests.length} accent={pendingJoinRequests.length > 0} />
         <StatCard label="Unread" value={unread} accent={unread > 0} />
       </div>
 
@@ -151,6 +155,35 @@ export default function DashboardPage() {
                   </button>
                 </div>
               </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Your own sent join requests — read-only, the leader is the one who acts */}
+      {pendingJoinRequests.length > 0 && (
+        <section className="mb-10">
+          <h2 className="text-xs uppercase tracking-wide text-muted-foreground font-medium mb-4">
+            Your join requests
+          </h2>
+          <div className="flex flex-col gap-3">
+            {pendingJoinRequests.map((req) => (
+              <Link
+                key={req.id}
+                href={`/teams/${req.teamId}`}
+                className="block bg-card border border-dashed border-border rounded-xl px-5 py-4 hover:border-accent/40 transition-colors"
+              >
+                <p className="text-sm">
+                  ⏳ Waiting on{" "}
+                  <span className="font-medium">{req.team?.name}</span>
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {req.team?.hackathon?.name}
+                  {req.team?.leader?.name ? ` · Led by ${req.team.leader.name}` : ""}
+                  {" · "}
+                  <span className="text-accent font-medium">{req.score} / 100 match</span>
+                </p>
+              </Link>
             ))}
           </div>
         </section>
@@ -283,7 +316,7 @@ function TeamCard({ team, compact }: { team: Team; compact?: boolean }) {
           </span>
           {pendingCount > 0 && (
             <span className="text-xs text-accent ml-auto">
-              {pendingCount} pending invite{pendingCount !== 1 ? "s" : ""}
+              {pendingCount} pending — invites &amp; join requests
             </span>
           )}
         </div>

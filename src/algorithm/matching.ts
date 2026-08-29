@@ -1,7 +1,14 @@
 import { Prisma, User, UserSkill } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 
-type TeamForScoring = Prisma.TeamGetPayload<{ include: { requiredSkills: true; leader: true } }>;
+// scoreCandidate only ever reads these specific fields off "team" and
+// "candidate" — a minimal structural type instead of a strict Prisma payload
+// type, so it works unmodified whether it's scoring candidates for a team
+// (calculateMatches) or teams for a candidate (calculateTeamMatches).
+type TeamForScoring = {
+  requiredSkills: { skillId: string }[];
+  leader: { timezoneOffset: number; availability: User['availability'] };
+};
 
 // Fields safe to return to the leader viewing ranked candidates —
 // deliberately excludes the password hash.
@@ -18,7 +25,12 @@ const SAFE_USER_SELECT = {
   createdAt: true,
 } satisfies Prisma.UserSelect;
 
-type CandidateForScoring = Omit<User, 'password'> & { skills: UserSkill[] };
+type CandidateForScoring = {
+  skills: { skillId: string; proficiency: UserSkill['proficiency'] }[];
+  reliabilityScore: number;
+  timezoneOffset: number;
+  availability: User['availability'];
+};
 
 type MatchResult = {
   candidate: Omit<User, 'password'>;
@@ -31,9 +43,10 @@ type MatchResult = {
   };
 };
 
-// Max candidates scored/returned per team so a huge user base can't be
+// Max candidates/teams scored per request so a huge user base can't be
 // loaded into memory in one go.
 const MAX_CANDIDATES = 200;
+const MAX_TEAMS_FOR_MATCHING = 100;
 
 const PROFICIENCY_WEIGHT: Record<UserSkill['proficiency'], number> = {
   BEGINNER: 0.6,
@@ -121,10 +134,12 @@ export const calculateMatches = async (teamId: string): Promise<MatchResult[]> =
   return results.sort((a, b) => b.score - a.score);
 };
 
-export const calculateSingleMatch = async (
+// Same lookup as calculateSingleMatch, but also returns the breakdown — used
+// wherever the UI needs to explain the score, not just show the number.
+export const calculateSingleMatchDetailed = async (
   teamId: string,
   userId: string
-): Promise<number> => {
+): Promise<{ score: number; breakdown: MatchResult['breakdown'] }> => {
   const team = await prisma.team.findUnique({
     where: { id: teamId },
     include: { requiredSkills: true, leader: true },
@@ -137,5 +152,62 @@ export const calculateSingleMatch = async (
   });
   if (!candidate) throw new Error('Candidate not found');
 
-  return scoreCandidate(team, candidate).score;
+  return scoreCandidate(team, candidate);
+};
+
+export const calculateSingleMatch = async (
+  teamId: string,
+  userId: string
+): Promise<number> => {
+  const { score } = await calculateSingleMatchDetailed(teamId, userId);
+  return score;
+};
+
+type TeamForMatching = Prisma.TeamGetPayload<{
+  include: {
+    requiredSkills: { include: { skill: true } };
+    hackathon: true;
+    leader: { select: typeof SAFE_USER_SELECT };
+    _count: { select: { members: true } };
+  };
+}>;
+
+export type TeamMatchResult = {
+  team: Omit<TeamForMatching, 'leader'> & { leader: Omit<User, 'password'> };
+  score: number;
+  breakdown: MatchResult['breakdown'];
+};
+
+// The mirror image of calculateMatches: instead of ranking candidates for a
+// team, this ranks FORMING teams for one candidate — same scoreCandidate
+// formula, just called with the roles reversed (the browsing user stands in
+// for "candidate", each team's leader supplies the timezone/availability
+// half of the formula, exactly like it does for calculateMatches).
+export const calculateTeamMatches = async (userId: string): Promise<TeamMatchResult[]> => {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: { skills: true },
+  });
+  if (!user) throw new Error('User not found');
+
+  const teams = await prisma.team.findMany({
+    where: {
+      status: 'FORMING',
+      members: { none: { userId } },
+    },
+    include: {
+      requiredSkills: { include: { skill: true } },
+      hackathon: true,
+      leader: { select: SAFE_USER_SELECT },
+      _count: { select: { members: true } },
+    },
+    take: MAX_TEAMS_FOR_MATCHING,
+  });
+
+  const results: TeamMatchResult[] = teams.map(team => {
+    const { score, breakdown } = scoreCandidate(team, user);
+    return { team, score, breakdown };
+  });
+
+  return results.sort((a, b) => b.score - a.score);
 };
