@@ -2,34 +2,49 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
+import { toast } from "sonner"
 import api from "@/lib/axios"
 import { useAuthStore } from "@/stores/authStore"
-import { Team, Notification } from "@/types"
+import { Team, Notification, Match } from "@/types"
 
 export default function DashboardPage() {
   const { user } = useAuthStore()
 
   const [myTeams, setMyTeams] = useState<Team[]>([])
+  const [openTeams, setOpenTeams] = useState<Team[]>([])
+  const [pendingInvites, setPendingInvites] = useState<Match[]>([])
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
 
-  useEffect(() => {
-    const fetchAll = async () => {
-      try {
-        const [teamsRes, notifRes] = await Promise.all([
-          api.get("/api/teams/my"),
-          api.get("/api/notifications"),
-        ])
-        setMyTeams(teamsRes.data.teams || [])
-        setNotifications(notifRes.data.notifications || [])
-      } catch (err) {
-        setError("Failed to load dashboard data.")
-      } finally {
-        setLoading(false)
-      }
+  const loadDashboard = async () => {
+    try {
+      const [teamsRes, allTeamsRes, invitesRes, notifRes] = await Promise.all([
+        api.get("/api/teams/my"),
+        api.get("/api/teams"),
+        api.get("/api/matches/my"),
+        api.get("/api/notifications"),
+      ])
+      const teams: Team[] = teamsRes.data.teams || []
+      const myTeamIds = new Set(teams.map((t) => t.id))
+
+      setMyTeams(teams)
+      setOpenTeams(
+        (allTeamsRes.data.teams || []).filter(
+          (t: Team) => t.status === "FORMING" && !myTeamIds.has(t.id)
+        )
+      )
+      setPendingInvites(invitesRes.data.invites || [])
+      setNotifications(notifRes.data.notifications || [])
+    } catch (err) {
+      setError("Failed to load dashboard data.")
+    } finally {
+      setLoading(false)
     }
-    fetchAll()
+  }
+
+  useEffect(() => {
+    loadDashboard()
   }, [])
 
   const markRead = async (id: string) => {
@@ -43,8 +58,24 @@ export default function DashboardPage() {
     }
   }
 
+  const [respondingId, setRespondingId] = useState("")
+
+  const handleRespond = async (matchId: string, status: "ACCEPTED" | "REJECTED") => {
+    setRespondingId(matchId)
+    try {
+      await api.patch(`/api/matches/${matchId}/respond`, { status })
+      toast.success(status === "ACCEPTED" ? "Invitation accepted." : "Invitation rejected.")
+      // Team membership/counts changed — reload everything rather than
+      // trying to patch every derived count by hand.
+      await loadDashboard()
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to respond to invite.")
+    } finally {
+      setRespondingId("")
+    }
+  }
+
   const unread = notifications.filter((n) => !n.read).length
-  const openTeams = myTeams.filter((t) => t.status === "FORMING")
 
   if (loading) {
     return (
@@ -72,11 +103,58 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-px bg-border rounded-xl overflow-hidden border border-border mb-10 shadow-sm">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-border rounded-xl overflow-hidden border border-border mb-10 shadow-sm">
         <StatCard label="Your teams" value={myTeams.length} />
         <StatCard label="Open teams" value={openTeams.length} accent={openTeams.length > 0} />
+        <StatCard label="Pending invites" value={pendingInvites.length} accent={pendingInvites.length > 0} />
         <StatCard label="Unread" value={unread} accent={unread > 0} />
       </div>
+
+      {/* Pending invitations — the thing most likely to need action right now */}
+      {pendingInvites.length > 0 && (
+        <section className="mb-10">
+          <h2 className="text-xs uppercase tracking-wide text-muted-foreground font-medium mb-4">
+            Pending invitations
+          </h2>
+          <div className="flex flex-col gap-3">
+            {pendingInvites.map((invite) => (
+              <div
+                key={invite.id}
+                className="bg-card border border-accent/30 rounded-xl px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-4 shadow-sm shadow-accent/10"
+              >
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm">
+                    You&apos;re invited to join{" "}
+                    <span className="font-medium">{invite.team?.name}</span>
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {invite.team?.hackathon?.name}
+                    {invite.team?.leader?.name ? ` · Led by ${invite.team.leader.name}` : ""}
+                    {" · "}
+                    <span className="text-accent font-medium">{invite.score} / 100 match</span>
+                  </p>
+                </div>
+                <div className="flex gap-2 shrink-0">
+                  <button
+                    onClick={() => handleRespond(invite.id, "ACCEPTED")}
+                    disabled={respondingId === invite.id}
+                    className="text-sm font-medium bg-accent text-accent-foreground rounded-md px-3.5 py-1.5 shadow-sm shadow-accent/20 hover:opacity-90 transition-all disabled:opacity-40"
+                  >
+                    {respondingId === invite.id ? "Working..." : "Accept"}
+                  </button>
+                  <button
+                    onClick={() => handleRespond(invite.id, "REJECTED")}
+                    disabled={respondingId === invite.id}
+                    className="text-sm border border-border rounded-md px-3.5 py-1.5 hover:border-destructive/50 hover:text-destructive transition-colors disabled:opacity-40"
+                  >
+                    Reject
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       <div className="grid sm:grid-cols-2 gap-8">
         <section>
@@ -90,24 +168,35 @@ export default function DashboardPage() {
           </div>
 
           {myTeams.length === 0 ? (
-            <EmptyState message="You're not on any team yet." actionLabel="Browse teams" actionHref="/teams" />
+            <EmptyState
+              message="You haven't joined a team yet."
+              detail="Find teammates who match your skills."
+              actionLabel="Find a team"
+              actionHref="/teams"
+            />
           ) : (
             <div className="flex flex-col gap-2">
               {myTeams.map((team) => (
-                <Link
-                  key={team.id}
-                  href={`/teams/${team.id}`}
-                  className="block bg-card border border-border/60 hover:border-accent/40 hover:shadow-md hover:shadow-black/10 rounded-lg px-4 py-3 transition-all"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">{team.name}</span>
-                    <StatusBadge status={team.status} />
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {team.hackathon?.name || "No hackathon"}
-                  </p>
-                </Link>
+                <TeamCard key={team.id} team={team} />
               ))}
+            </div>
+          )}
+
+          {openTeams.length > 0 && (
+            <div className="mt-6">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-xs uppercase tracking-wide text-muted-foreground font-medium">
+                  Open teams looking for members
+                </h3>
+                <Link href="/teams" className="text-xs text-accent hover:opacity-80 font-medium transition-opacity">
+                  Browse all
+                </Link>
+              </div>
+              <div className="flex flex-col gap-2">
+                {openTeams.slice(0, 3).map((team) => (
+                  <TeamCard key={team.id} team={team} compact />
+                ))}
+              </div>
             </div>
           )}
         </section>
@@ -121,7 +210,10 @@ export default function DashboardPage() {
           </div>
 
           {notifications.length === 0 ? (
-            <EmptyState message="No notifications yet." />
+            <EmptyState
+              message="No notifications yet."
+              detail="Team invitations and important team activity will appear here."
+            />
           ) : (
             <div className="flex flex-col gap-2">
               {notifications.slice(0, 6).map((notif) => (
@@ -161,6 +253,45 @@ export default function DashboardPage() {
   )
 }
 
+function TeamCard({ team, compact }: { team: Team; compact?: boolean }) {
+  const memberCount = team.members?.length ?? 0
+  const isFull = memberCount >= team.maxSize
+  const pendingCount = team.matches?.length ?? 0
+
+  return (
+    <Link
+      href={`/teams/${team.id}`}
+      className="block bg-card border border-border/60 hover:border-accent/40 hover:shadow-md hover:shadow-black/10 rounded-lg px-4 py-3 transition-all"
+    >
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-sm font-medium truncate">{team.name}</span>
+        <StatusBadge status={team.status} />
+      </div>
+      <p className="text-xs text-muted-foreground mt-1">
+        {team.hackathon?.name || "No hackathon"}
+      </p>
+      {!compact && (
+        <div className="flex items-center gap-3 mt-3">
+          <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden max-w-24">
+            <div
+              className={`h-full rounded-full ${isFull ? "bg-accent" : "bg-accent/60"}`}
+              style={{ width: `${Math.min(100, (memberCount / team.maxSize) * 100)}%` }}
+            />
+          </div>
+          <span className="text-xs text-muted-foreground">
+            {memberCount} / {team.maxSize} members{isFull ? " · Full" : ""}
+          </span>
+          {pendingCount > 0 && (
+            <span className="text-xs text-accent ml-auto">
+              {pendingCount} pending invite{pendingCount !== 1 ? "s" : ""}
+            </span>
+          )}
+        </div>
+      )}
+    </Link>
+  )
+}
+
 function StatCard({ label, value, accent }: { label: string; value: number; accent?: boolean }) {
   return (
     <div className="bg-card px-5 py-5 transition-colors hover:bg-muted/30">
@@ -176,7 +307,7 @@ function StatusBadge({ status }: { status: string }) {
   const isActive = status === "FORMING"
   return (
     <span
-      className={`text-xs font-medium rounded-full px-2.5 py-0.5 border ${
+      className={`text-xs font-medium rounded-full px-2.5 py-0.5 border shrink-0 ${
         isActive ? "text-accent bg-accent/10 border-accent/30" : "text-muted-foreground bg-background border-border"
       }`}
     >
@@ -185,14 +316,25 @@ function StatusBadge({ status }: { status: string }) {
   )
 }
 
-function EmptyState({ message, actionLabel, actionHref }: { message: string; actionLabel?: string; actionHref?: string }) {
+function EmptyState({
+  message,
+  detail,
+  actionLabel,
+  actionHref,
+}: {
+  message: string
+  detail?: string
+  actionLabel?: string
+  actionHref?: string
+}) {
   return (
     <div className="border border-dashed border-border/60 rounded-lg px-6 py-9 text-center bg-card/40">
-      <p className="text-sm text-muted-foreground mb-3">{message}</p>
+      <p className="text-sm text-muted-foreground">{message}</p>
+      {detail && <p className="text-xs text-muted-foreground/70 mt-1">{detail}</p>}
       {actionLabel && actionHref && (
         <Link
           href={actionHref}
-          className="text-xs font-medium border border-border rounded-md px-4 py-1.5 inline-block hover:border-accent hover:text-accent transition-colors"
+          className="text-xs font-medium border border-border rounded-md px-4 py-1.5 inline-block mt-3 hover:border-accent hover:text-accent transition-colors"
         >
           {actionLabel}
         </Link>

@@ -1,5 +1,6 @@
 import type { Metadata } from "next"
 import { Inter, Space_Grotesk } from "next/font/google"
+import { Toaster } from "@/components/ui/sonner"
 import "./globals.css"
 
 const inter = Inter({
@@ -27,6 +28,7 @@ export default function RootLayout({
     <html lang="en" className={`h-full ${inter.variable} ${spaceGrotesk.variable}`}>
       <body className="min-h-full flex flex-col antialiased">
         {children}
+        <Toaster position="bottom-right" />
       </body>
     </html>
   )

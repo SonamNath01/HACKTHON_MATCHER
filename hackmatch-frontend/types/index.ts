@@ -62,9 +62,14 @@ export type Team = {
   hackathon: Hackathon
   requiredSkills: TeamRequiredSkill[]
   members: TeamMember[]
+  // Only present on GET /api/teams/:id — the leader sees every pending
+  // invite on the team, everyone else sees only their own.
+  matches?: Match[]
+  // Only present on GET /api/matches/my
+  leader?: User
 }
 
-// ─── MATCH 
+// ─── MATCH
 export type Match = {
   id: string
   teamId: string
@@ -74,6 +79,7 @@ export type Match = {
   status: 'PENDING' | 'ACCEPTED' | 'REJECTED'
   createdAt: string
   team?: Team
+  receiver?: User
 }
 
 export type MatchResult = {
@@ -104,4 +110,8 @@ export type AuthResponse = {
 
 export type NotificationsResponse = {
   notifications: Notification[]
+}
+
+export type PendingInvitesResponse = {
+  invites: Match[]
 }

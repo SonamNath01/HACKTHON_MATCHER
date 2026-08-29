@@ -6,6 +6,21 @@ import { calculateSingleMatch } from '../algorithm/matching';
 // Safety cap for unbounded list endpoints.
 const MAX_TEAMS = 100;
 
+// Fields safe to return to any authenticated caller viewing a team/invite —
+// deliberately excludes the password hash.
+const SAFE_USER_SELECT = {
+  id: true,
+  name: true,
+  email: true,
+  bio: true,
+  githubUrl: true,
+  portfolioUrl: true,
+  timezoneOffset: true,
+  availability: true,
+  reliabilityScore: true,
+  createdAt: true,
+} satisfies Prisma.UserSelect;
+
 export const createTeam = async (req: Request, res: Response) => {
   const { name, description, hackathonId, requiredSkills } = req.body;
   const userId = req.user?.id;
@@ -64,15 +79,29 @@ export const getTeam = async (req: Request, res: Response) => {
   const id = req.params.id as string;
   const userId = req.user?.id;
   try {
+    // Look up just the leaderId first so we know whether the requester is
+    // allowed to see every pending invite on the team, or only their own.
+    const teamMeta = await prisma.team.findUnique({ where: { id }, select: { leaderId: true } });
+    if (!teamMeta) {
+      return res.status(404).json({ message: 'Team not found' });
+    }
+    const isLeader = teamMeta.leaderId === userId;
+
     const team = await prisma.team.findUnique({
       where: { id },
       include: {
         requiredSkills: { include: { skill: true } },
-        members: { include: { user: true } },
+        members: {
+          include: { user: { select: { ...SAFE_USER_SELECT, skills: { include: { skill: true } } } } }
+        },
         hackathon: true,
-        // Only the requesting user's own invite for this team — never expose
-        // other candidates' invites/scores to someone viewing the team.
-        matches: { where: { receiverId: userId } }
+        // The leader can see every pending invite (to show who's been asked
+        // and hasn't responded yet); everyone else only sees their own invite
+        // — never expose another candidate's invite/score to a team member.
+        matches: {
+          where: isLeader ? { status: 'PENDING' } : { receiverId: userId },
+          include: { receiver: { select: { ...SAFE_USER_SELECT, skills: { include: { skill: true } } } } }
+        }
       }
     });
 
@@ -96,8 +125,11 @@ export const getMyTeams = async (req: Request, res: Response) => {
       },
       include: {
         requiredSkills: { include: { skill: true } },
-        members: { include: { user: true } },
-        hackathon: true
+        members: { include: { user: { select: SAFE_USER_SELECT } } },
+        hackathon: true,
+        // Just the count-relevant id — the dashboard only needs "how many
+        // invites are still pending", never who they were sent to.
+        matches: { where: { status: 'PENDING' }, select: { id: true } }
       }
     });
     res.status(200).json({ teams });

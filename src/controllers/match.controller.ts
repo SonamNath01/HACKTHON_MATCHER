@@ -3,6 +3,39 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { calculateMatches } from '../algorithm/matching';
 
+// Fields safe to return to any authenticated caller — deliberately excludes
+// the password hash.
+const SAFE_USER_SELECT = {
+  id: true,
+  name: true,
+  email: true,
+  bio: true,
+  githubUrl: true,
+  portfolioUrl: true,
+  timezoneOffset: true,
+  availability: true,
+  reliabilityScore: true,
+  createdAt: true,
+} satisfies Prisma.UserSelect;
+
+// All of the current user's pending invitations, across every team — used
+// by the dashboard so a user doesn't have to open each team individually to
+// see what they've been invited to.
+export const getMyPendingInvites = async (req: Request, res: Response) => {
+  const userId = req.user?.id;
+
+  try {
+    const invites = await prisma.match.findMany({
+      where: { receiverId: userId, status: 'PENDING' },
+      include: { team: { include: { hackathon: true, leader: { select: SAFE_USER_SELECT } } } },
+      orderBy: { createdAt: 'desc' }
+    });
+    res.status(200).json({ invites });
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching invites' });
+  }
+};
+
 export const getMatches = async (req: Request, res: Response) => {
   const teamId = req.params.id as string;
   const userId = req.user?.id;

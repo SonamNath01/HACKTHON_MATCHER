@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
+import { toast } from "sonner"
 import api from "@/lib/axios"
 import { Hackathon, Skill } from "@/types"
 
@@ -56,6 +57,7 @@ export default function CreateTeamPage() {
         hackathonId,
         requiredSkills,
       })
+      toast.success("Team created.")
       router.push("/teams")
     } catch (err: any) {
       setError(err.response?.data?.message || "Failed to create team.")

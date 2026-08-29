@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { toast } from "sonner"
 import api from "@/lib/axios"
 import { Skill, User } from "@/types"
 
@@ -60,6 +61,7 @@ export default function ProfilePage() {
       )
       setSelectedSkillId("")
       setSelectedProficiency("BEGINNER")
+      toast.success(`Added ${added.skill?.name || "skill"}.`)
     } catch (err: any) {
       setSkillError(err.response?.data?.message || "Failed to add skill.")
     } finally {
@@ -101,9 +103,11 @@ export default function ProfilePage() {
   }
   if (!profile) return <div className="p-10 text-sm text-muted-foreground">Profile not found.</div>
 
+  const completion = getProfileCompletion(profile)
+
   return (
     <div className="p-6 sm:p-10 max-w-3xl mx-auto">
-      <div className="flex items-center gap-4 mb-10">
+      <div className="flex items-center gap-4 mb-6">
         <div className="w-16 h-16 rounded-full bg-accent/10 border border-accent/30 flex items-center justify-center font-heading text-2xl font-bold text-accent shrink-0 shadow-sm shadow-accent/10">
           {profile.name?.[0]?.toUpperCase() || "?"}
         </div>
@@ -112,6 +116,27 @@ export default function ProfilePage() {
           <p className="text-sm text-muted-foreground truncate">{profile.email}</p>
         </div>
       </div>
+
+      {completion.percent < 100 && (
+        <div className="bg-card border border-border/60 rounded-xl p-4 mb-10">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs uppercase tracking-wide text-muted-foreground font-medium">Profile</span>
+            <span className="text-sm font-medium text-accent">{completion.percent}% complete</span>
+          </div>
+          <div className="h-1.5 bg-muted rounded-full overflow-hidden mb-3">
+            <div className="h-full bg-accent rounded-full transition-[width]" style={{ width: `${completion.percent}%` }} />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Missing: {completion.missing.join(", ")}.{" "}
+            A complete profile — especially skills — is what the matching algorithm uses to find you teams.
+          </p>
+          {completion.missingSkills && (
+            <a href="#skills" className="text-xs font-medium text-accent hover:opacity-80 mt-2 inline-block">
+              + Add skills below
+            </a>
+          )}
+        </div>
+      )}
 
       {profile.bio && (
         <section className="mb-8">
@@ -149,7 +174,7 @@ export default function ProfilePage() {
         </section>
       )}
 
-      <section>
+      <section id="skills">
         <h2 className="text-xs uppercase tracking-wide text-muted-foreground font-medium mb-3">Skills</h2>
         {profile.skills && profile.skills.length > 0 ? (
           <div className="flex flex-wrap gap-2 mb-4">
@@ -219,6 +244,25 @@ export default function ProfilePage() {
       </section>
     </div>
   )
+}
+
+// Simple weighted checklist: skills matter most since they drive matching,
+// bio/links are secondary. Only counts fields the backend actually stores.
+function getProfileCompletion(profile: User) {
+  const hasSkills = (profile.skills?.length ?? 0) > 0
+  const hasBio = !!profile.bio?.trim()
+  const hasLinks = !!(profile.githubUrl || profile.portfolioUrl)
+
+  const percent = Math.round(
+    (hasSkills ? 50 : 0) + (hasBio ? 25 : 0) + (hasLinks ? 25 : 0)
+  )
+
+  const missing: string[] = []
+  if (!hasSkills) missing.push("skills")
+  if (!hasBio) missing.push("a bio")
+  if (!hasLinks) missing.push("a GitHub or portfolio link")
+
+  return { percent, missing, missingSkills: !hasSkills }
 }
 
 function DetailCard({ label, value, accent }: { label: string; value: string; accent?: boolean }) {

@@ -2,10 +2,26 @@ import { Prisma, User, UserSkill } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 
 type TeamForScoring = Prisma.TeamGetPayload<{ include: { requiredSkills: true; leader: true } }>;
-type CandidateForScoring = User & { skills: UserSkill[] };
+
+// Fields safe to return to the leader viewing ranked candidates —
+// deliberately excludes the password hash.
+const SAFE_USER_SELECT = {
+  id: true,
+  name: true,
+  email: true,
+  bio: true,
+  githubUrl: true,
+  portfolioUrl: true,
+  timezoneOffset: true,
+  availability: true,
+  reliabilityScore: true,
+  createdAt: true,
+} satisfies Prisma.UserSelect;
+
+type CandidateForScoring = Omit<User, 'password'> & { skills: UserSkill[] };
 
 type MatchResult = {
-  candidate: User;
+  candidate: Omit<User, 'password'>;
   score: number;
   breakdown: {
     skillScore: number;
@@ -90,7 +106,10 @@ export const calculateMatches = async (teamId: string): Promise<MatchResult[]> =
         ? { skills: { some: { skillId: { in: requiredSkillIds } } } }
         : {}),
     },
-    include: { skills: true },
+    // select (not include) so the password hash never leaves the DB layer;
+    // nest the skill relation (not just skillId) so the frontend can show
+    // skill names — calculateSingleMatch doesn't need this, it only returns a number.
+    select: { ...SAFE_USER_SELECT, skills: { include: { skill: true } } },
     take: MAX_CANDIDATES,
   });
 
