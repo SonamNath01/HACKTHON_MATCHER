@@ -31,14 +31,14 @@ The project is built with TypeScript, Express, Prisma, PostgreSQL, and JWT-based
 
 ## Tech Stack
 
-- TypeScript
+- React.js
 - Node.js
 - Express
 - Prisma ORM
 - PostgreSQL
 - JWT
 - bcryptjs
-- Faker
+
 
 ## Project Structure
 
